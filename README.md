@@ -1,6 +1,7 @@
 # React + Ant Design Pro 商品管理サンプル
 
 React 19 と Ant Design Pro の ProTable を使用したデータ一覧表示アプリのサンプルです。
+10万件のテストデータで大規模データの表示・検索・フィルタリングを体験できます。
 
 ## 技術スタック
 
@@ -34,7 +35,7 @@ npm install --prefix server
 # マイグレーション実行
 ./server/node_modules/.bin/prisma migrate dev --schema ./server/prisma/schema.prisma
 
-# シードデータ投入（1000件）
+# シードデータ投入（10万件）
 ./server/node_modules/.bin/tsx ./server/prisma/seed.ts
 ```
 
@@ -69,7 +70,7 @@ npm run dev
 ├── server/                       # バックエンド
 │   ├── prisma/
 │   │   ├── schema.prisma         # DBスキーマ
-│   │   ├── seed.ts               # シードデータ
+│   │   ├── seed.ts               # シードデータ生成
 │   │   └── dev.db                # SQLiteデータベース
 │   └── src/
 │       └── index.ts              # Express APIサーバー
@@ -107,6 +108,20 @@ npm run dev
 - カラム表示/非表示の切り替え
 - 行選択と一括操作
 - 密度切替、フルスクリーン表示
+
+## テストデータ
+
+シードスクリプトにより10万件の商品データを自動生成します。
+
+| 項目 | 内容 |
+|------|------|
+| 件数 | 100,000件 |
+| カテゴリ | electronics, clothing, food, furniture, books |
+| 価格帯 | カテゴリに応じた現実的な価格 |
+| ステータス | active, inactive, soldout |
+| 日付範囲 | 2022-01-01 〜 2024-12-31 |
+
+商品名は「プレミアム ワイヤレスイヤホン」「高品質セーター Ver.3」など、ブランド・形容詞・色・バージョンを組み合わせて自動生成されます。
 
 ## DB操作
 

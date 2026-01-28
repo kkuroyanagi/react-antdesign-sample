@@ -2,6 +2,9 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
+const TOTAL_PRODUCTS = 100_000;
+const BATCH_SIZE = 1000;
+
 // カテゴリごとの商品名テンプレート
 const productTemplates: Record<string, string[]> = {
   electronics: [
@@ -36,9 +39,10 @@ const productTemplates: Record<string, string[]> = {
   ],
 };
 
-const brands = ['プレミアム', 'スタンダード', 'プロ', 'ベーシック', 'デラックス', 'エコ', 'ハイエンド', 'エントリー'];
-const adjectives = ['高品質', '最新', '人気', '限定', '特選', 'おすすめ', '新作', '定番'];
-const statuses = ['active', 'active', 'active', 'active', 'inactive', 'soldout'] as const;
+const brands = ['プレミアム', 'スタンダード', 'プロ', 'ベーシック', 'デラックス', 'エコ', 'ハイエンド', 'エントリー', 'リミテッド', 'クラシック'];
+const adjectives = ['高品質', '最新', '人気', '限定', '特選', 'おすすめ', '新作', '定番', '厳選', '話題の'];
+const colors = ['ブラック', 'ホワイト', 'シルバー', 'ゴールド', 'ネイビー', 'グレー', 'レッド', 'ブルー'];
+const statuses = ['active', 'active', 'active', 'active', 'active', 'inactive', 'soldout'] as const;
 const categories = Object.keys(productTemplates);
 
 // 価格帯（カテゴリ別）
@@ -67,24 +71,28 @@ function generateProduct(id: number) {
   const baseName = randomElement(productTemplates[category]);
   const brand = randomElement(brands);
   const adjective = randomElement(adjectives);
+  const color = randomElement(colors);
 
-  // 商品名のバリエーション
+  // 商品名のバリエーション（より多様に）
   const namePatterns = [
     `${baseName} ${brand}`,
     `${adjective}${baseName}`,
-    `${brand} ${baseName} ${randomInt(1, 9)}`,
-    `${baseName} Ver.${randomInt(1, 5)}`,
+    `${brand} ${baseName} ${randomInt(1, 99)}`,
+    `${baseName} Ver.${randomInt(1, 10)}`,
     `${adjective}${baseName} ${brand}`,
+    `${baseName} ${color}`,
+    `${brand} ${baseName} ${color}`,
+    `${baseName} ${brand} #${id}`,
   ];
   const name = randomElement(namePatterns);
 
   const [minPrice, maxPrice] = priceRanges[category];
-  const price = Math.round(randomInt(minPrice, maxPrice) / 100) * 100; // 100円単位
+  const price = Math.round(randomInt(minPrice, maxPrice) / 100) * 100;
 
   const status = randomElement(statuses);
-  const stock = status === 'soldout' ? 0 : randomInt(0, 200);
+  const stock = status === 'soldout' ? 0 : randomInt(0, 500);
 
-  const createdAt = randomDate(new Date('2023-01-01'), new Date('2024-06-01'));
+  const createdAt = randomDate(new Date('2022-01-01'), new Date('2024-06-01'));
   const updatedAt = randomDate(createdAt, new Date('2024-12-31'));
 
   return {
@@ -99,24 +107,32 @@ function generateProduct(id: number) {
 }
 
 async function main() {
-  console.log('Seeding database with 1000 products...');
+  console.log(`Seeding database with ${TOTAL_PRODUCTS.toLocaleString()} products...`);
+  console.log(`Batch size: ${BATCH_SIZE.toLocaleString()}`);
 
   // 既存データを削除
   await prisma.product.deleteMany();
-  console.log('Existing data cleared.');
+  console.log('Existing data cleared.\n');
 
-  // 1000件のデータを生成
-  const products = Array.from({ length: 1000 }, (_, i) => generateProduct(i + 1));
+  const startTime = Date.now();
 
-  // バッチで挿入（100件ずつ）
-  const batchSize = 100;
-  for (let i = 0; i < products.length; i += batchSize) {
-    const batch = products.slice(i, i + batchSize);
+  // バッチで挿入
+  for (let i = 0; i < TOTAL_PRODUCTS; i += BATCH_SIZE) {
+    const batch = Array.from(
+      { length: Math.min(BATCH_SIZE, TOTAL_PRODUCTS - i) },
+      (_, j) => generateProduct(i + j + 1)
+    );
+
     await prisma.product.createMany({ data: batch });
-    console.log(`Inserted ${Math.min(i + batchSize, products.length)} / ${products.length} products`);
+
+    const progress = Math.min(i + BATCH_SIZE, TOTAL_PRODUCTS);
+    const percent = ((progress / TOTAL_PRODUCTS) * 100).toFixed(1);
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    process.stdout.write(`\rInserted ${progress.toLocaleString()} / ${TOTAL_PRODUCTS.toLocaleString()} (${percent}%) - ${elapsed}s`);
   }
 
-  console.log('Seeding completed!');
+  const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
+  console.log(`\n\nSeeding completed in ${totalTime}s!`);
 }
 
 main()
