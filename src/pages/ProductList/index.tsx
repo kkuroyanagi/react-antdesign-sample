@@ -1,49 +1,153 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import { ProTable, type ActionType, type ProColumns } from '@ant-design/pro-components';
 import { Button, Space, Tag, message, InputNumber, Typography } from 'antd';
 import { PlusOutlined, ExportOutlined } from '@ant-design/icons';
 
 const { Text } = Typography;
-import type { Product } from '@/types/product';
+import type { Product, ProductStatus } from '@/types/product';
 import { ProductStatusMap, CategoryOptions } from '@/types/product';
-import { fetchProducts, fetchProductsForExport, type FetchProductsParams } from '@/services/productService';
+import { fetchProducts } from '@/services/productService';
 import { exportProductsToExcel } from '@/utils/exportExcel';
+
+// キャッシュデータの型定義
+interface CacheData {
+  data: Product[];
+  total: number;
+  cacheKey: string;
+}
+
+// 検索パラメータの型定義
+interface SearchParams {
+  name?: string;
+  category?: string;
+  status?: ProductStatus;
+}
+
+// ソート情報の型定義
+interface SortInfo {
+  field?: string;
+  order?: 'ascend' | 'descend';
+}
 
 const ProductList = () => {
   const actionRef = useRef<ActionType>(null);
-  const searchParamsRef = useRef<Omit<FetchProductsParams, 'current' | 'pageSize'>>({});
+
+  // キャッシュ管理
+  const cacheRef = useRef<CacheData | null>(null);
+  const [cacheVersion, setCacheVersion] = useState(0);
+
+  // ページネーション
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  // 検索・ソート条件
+  const [searchParams, setSearchParams] = useState<SearchParams>({});
+  const [sortInfo, setSortInfo] = useState<SortInfo>({});
+
+  // ローディング・エクスポート状態
+  const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  // 取得上限
   const [fetchLimit, setFetchLimit] = useState<number>(() => {
     const saved = localStorage.getItem('productList.fetchLimit');
     return saved ? parseInt(saved, 10) : 1000;
   });
-  const [exporting, setExporting] = useState(false);
 
+  // localStorage に保存
   useEffect(() => {
     localStorage.setItem('productList.fetchLimit', String(fetchLimit));
   }, [fetchLimit]);
 
+  // キャッシュキーを生成
+  const generateCacheKey = useCallback(
+    (params: SearchParams, sort: SortInfo, limit: number): string => {
+      return JSON.stringify({
+        name: params.name || '',
+        category: params.category || '',
+        status: params.status || '',
+        sortField: sort.field || '',
+        sortOrder: sort.order || '',
+        limit,
+      });
+    },
+    []
+  );
+
+  // データ取得関数
+  const loadCacheData = useCallback(async () => {
+    const newCacheKey = generateCacheKey(searchParams, sortInfo, fetchLimit);
+
+    // キャッシュが有効な場合はスキップ
+    if (cacheRef.current && cacheRef.current.cacheKey === newCacheKey) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetchProducts({
+        current: 1,
+        pageSize: fetchLimit,
+        limit: fetchLimit,
+        name: searchParams.name,
+        category: searchParams.category,
+        status: searchParams.status,
+        sortField: sortInfo.field,
+        sortOrder: sortInfo.order,
+      });
+
+      cacheRef.current = {
+        data: response.data,
+        total: response.total,
+        cacheKey: newCacheKey,
+      };
+
+      setCacheVersion((v) => v + 1);
+      setCurrentPage(1);
+    } catch (error) {
+      console.error('Data fetch error:', error);
+      message.error('データの取得に失敗しました');
+    } finally {
+      setLoading(false);
+    }
+  }, [searchParams, sortInfo, fetchLimit, generateCacheKey]);
+
+  // 条件変更時にデータを取得
+  useEffect(() => {
+    loadCacheData();
+  }, [loadCacheData]);
+
+  // 表示データを計算
+  const displayData = useMemo(() => {
+    if (!cacheRef.current) return [];
+    const start = (currentPage - 1) * pageSize;
+    return cacheRef.current.data.slice(start, start + pageSize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, pageSize, cacheVersion]);
+
+  // 総件数
+  const total = cacheRef.current?.total ?? 0;
+
+  // 取得上限変更
   const handleLimitChange = (value: number | null) => {
     if (value) {
       setFetchLimit(value);
-      actionRef.current?.reload();
     }
   };
 
+  // エクスポート処理
   const handleExport = async () => {
+    if (!cacheRef.current || cacheRef.current.data.length === 0) {
+      message.warning('エクスポートするデータがありません');
+      return;
+    }
+
     setExporting(true);
     try {
-      const products = await fetchProductsForExport({
-        ...searchParamsRef.current,
-        limit: fetchLimit,
-      });
-
-      if (products.length === 0) {
-        message.warning('エクスポートするデータがありません');
-        return;
-      }
-
-      await exportProductsToExcel(products);
-      message.success(`${products.length.toLocaleString()}件のデータをエクスポートしました`);
+      await exportProductsToExcel(cacheRef.current.data);
+      message.success(
+        `${cacheRef.current.data.length.toLocaleString()}件のデータをエクスポートしました`
+      );
     } catch (error) {
       console.error('Export error:', error);
       message.error('エクスポートに失敗しました');
@@ -162,42 +266,48 @@ const ProductList = () => {
       actionRef={actionRef}
       rowKey="id"
       columns={columns}
-      request={async (params, sort) => {
-        const sortField = Object.keys(sort)[0];
-        const sortOrderValue = sortField ? sort[sortField] : undefined;
-        const sortOrder = sortOrderValue === 'ascend' || sortOrderValue === 'descend' ? sortOrderValue : undefined;
-
-        // エクスポート用に検索条件を保存
-        searchParamsRef.current = {
-          name: params.name,
-          category: params.category,
-          status: params.status,
-          sortField,
-          sortOrder,
-        };
-
-        const response = await fetchProducts({
-          current: params.current,
-          pageSize: params.pageSize,
-          ...searchParamsRef.current,
-          limit: fetchLimit,
-        });
-        return {
-          data: response.data,
-          total: response.total,
-          success: response.success,
-        };
-      }}
+      dataSource={displayData}
+      loading={loading}
       pagination={{
-        defaultPageSize: 10,
+        current: currentPage,
+        pageSize: pageSize,
+        total: total,
         showSizeChanger: true,
         showQuickJumper: true,
         pageSizeOptions: ['5', '10', '20', '50', '100'],
-        showTotal: (total) => `全 ${total.toLocaleString()} 件 (上限: ${fetchLimit.toLocaleString()} 件)`,
+        showTotal: (t) => `全 ${t.toLocaleString()} 件 (上限: ${fetchLimit.toLocaleString()} 件)`,
+        onChange: (page, size) => {
+          setCurrentPage(page);
+          if (size !== pageSize) {
+            setPageSize(size);
+            setCurrentPage(1);
+          }
+        },
       }}
       search={{
         labelWidth: 'auto',
         defaultCollapsed: false,
+      }}
+      onSubmit={(values) => {
+        setSearchParams({
+          name: values.name as string | undefined,
+          category: values.category as string | undefined,
+          status: values.status as ProductStatus | undefined,
+        });
+      }}
+      onReset={() => {
+        setSearchParams({});
+      }}
+      onChange={(_, __, sorter) => {
+        const sorterInfo = Array.isArray(sorter) ? sorter[0] : sorter;
+        if (sorterInfo?.field && sorterInfo?.order) {
+          setSortInfo({
+            field: sorterInfo.field as string,
+            order: sorterInfo.order as 'ascend' | 'descend',
+          });
+        } else {
+          setSortInfo({});
+        }
       }}
       dateFormatter="string"
       toolBarRender={() => [
@@ -233,7 +343,11 @@ const ProductList = () => {
       options={{
         density: true,
         fullScreen: true,
-        reload: true,
+        reload: () => {
+          // キャッシュをクリアして再取得
+          cacheRef.current = null;
+          loadCacheData();
+        },
         setting: true,
       }}
       rowSelection={{
