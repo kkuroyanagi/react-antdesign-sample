@@ -6,7 +6,7 @@ import { PlusOutlined, ExportOutlined } from '@ant-design/icons';
 const { Text } = Typography;
 import type { Product, ProductStatus } from '@/types/product';
 import { ProductStatusMap, CategoryOptions } from '@/types/product';
-import { fetchProducts } from '@/services/productService';
+import { fetchProducts, fetchProductsForExport } from '@/services/productService';
 import { exportProductsToExcel } from '@/utils/exportExcel';
 
 // キャッシュデータの型定義
@@ -47,6 +47,7 @@ const ProductList = () => {
   // ローディング・エクスポート状態
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportingAll, setExportingAll] = useState(false);
 
   // 取得上限
   const [fetchLimit, setFetchLimit] = useState<number>(() => {
@@ -135,7 +136,7 @@ const ProductList = () => {
     }
   };
 
-  // エクスポート処理
+  // エクスポート処理（キャッシュ内データ）
   const handleExport = async () => {
     if (!cacheRef.current || cacheRef.current.data.length === 0) {
       message.warning('エクスポートするデータがありません');
@@ -153,6 +154,35 @@ const ProductList = () => {
       message.error('エクスポートに失敗しました');
     } finally {
       setExporting(false);
+    }
+  };
+
+  // 全件エクスポート処理（上限なし）
+  const handleExportAll = async () => {
+    setExportingAll(true);
+    try {
+      const products = await fetchProductsForExport({
+        name: searchParams.name,
+        category: searchParams.category,
+        status: searchParams.status,
+        sortField: sortInfo.field,
+        sortOrder: sortInfo.order,
+        limit: 100000,
+      });
+
+      if (products.length === 0) {
+        message.warning('エクスポートするデータがありません');
+        return;
+      }
+
+      const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      await exportProductsToExcel(products, `商品一覧_全件_${date}.xlsx`);
+      message.success(`${products.length.toLocaleString()}件のデータをエクスポートしました`);
+    } catch (error) {
+      console.error('Export all error:', error);
+      message.error('エクスポートに失敗しました');
+    } finally {
+      setExportingAll(false);
     }
   };
 
@@ -338,6 +368,14 @@ const ProductList = () => {
           onClick={handleExport}
         >
           エクスポート
+        </Button>,
+        <Button
+          key="export-all"
+          icon={<ExportOutlined />}
+          loading={exportingAll}
+          onClick={handleExportAll}
+        >
+          全件エクスポート
         </Button>,
       ]}
       options={{
