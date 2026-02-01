@@ -1,13 +1,30 @@
-import { useRef } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { ProTable, type ActionType, type ProColumns } from '@ant-design/pro-components';
-import { Button, Space, Tag, message } from 'antd';
+import { Button, Space, Tag, message, InputNumber, Typography } from 'antd';
 import { PlusOutlined, ExportOutlined } from '@ant-design/icons';
+
+const { Text } = Typography;
 import type { Product } from '@/types/product';
 import { ProductStatusMap, CategoryOptions } from '@/types/product';
 import { fetchProducts } from '@/services/productService';
 
 const ProductList = () => {
   const actionRef = useRef<ActionType>(null);
+  const [fetchLimit, setFetchLimit] = useState<number>(() => {
+    const saved = localStorage.getItem('productList.fetchLimit');
+    return saved ? parseInt(saved, 10) : 1000;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('productList.fetchLimit', String(fetchLimit));
+  }, [fetchLimit]);
+
+  const handleLimitChange = (value: number | null) => {
+    if (value) {
+      setFetchLimit(value);
+      actionRef.current?.reload();
+    }
+  };
 
   const columns: ProColumns<Product>[] = [
     {
@@ -132,6 +149,7 @@ const ProductList = () => {
           status: params.status,
           sortField,
           sortOrder,
+          limit: fetchLimit,
         });
         return {
           data: response.data,
@@ -143,7 +161,8 @@ const ProductList = () => {
         defaultPageSize: 10,
         showSizeChanger: true,
         showQuickJumper: true,
-        pageSizeOptions: ['5', '10', '20', '50'],
+        pageSizeOptions: ['5', '10', '20', '50', '100'],
+        showTotal: (total) => `全 ${total.toLocaleString()} 件 (上限: ${fetchLimit.toLocaleString()} 件)`,
       }}
       search={{
         labelWidth: 'auto',
@@ -151,6 +170,18 @@ const ProductList = () => {
       }}
       dateFormatter="string"
       toolBarRender={() => [
+        <Space key="limit-setting" align="center">
+          <Text>取得上限:</Text>
+          <InputNumber
+            min={10}
+            max={10000}
+            step={100}
+            value={fetchLimit}
+            onChange={handleLimitChange}
+            style={{ width: 100 }}
+          />
+          <Text>件</Text>
+        </Space>,
         <Button
           key="add"
           type="primary"

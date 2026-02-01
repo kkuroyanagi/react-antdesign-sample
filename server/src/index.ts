@@ -15,6 +15,7 @@ app.get('/api/products', async (req, res) => {
     const {
       current = '1',
       pageSize = '10',
+      limit = '1000',
       name,
       category,
       status,
@@ -24,6 +25,7 @@ app.get('/api/products', async (req, res) => {
 
     const currentPage = parseInt(current as string, 10);
     const size = parseInt(pageSize as string, 10);
+    const maxLimit = Math.min(parseInt(limit as string, 10), 10000);
     const skip = (currentPage - 1) * size;
 
     // フィルタ条件を構築
@@ -52,12 +54,27 @@ app.get('/api/products', async (req, res) => {
       orderBy = { [sortField]: order };
     }
 
+    // 上限を超えている場合は空配列を返す
+    if (skip >= maxLimit) {
+      const total = await prisma.product.count({ where });
+      return res.json({
+        data: [],
+        total: Math.min(total, maxLimit),
+        success: true,
+        current: currentPage,
+        pageSize: size,
+      });
+    }
+
+    // 取得件数を上限で制限
+    const effectiveSize = Math.min(size, maxLimit - skip);
+
     // データ取得とカウントを並列実行
     const [products, total] = await Promise.all([
       prisma.product.findMany({
         where,
         skip,
-        take: size,
+        take: effectiveSize,
         orderBy,
       }),
       prisma.product.count({ where }),
@@ -72,7 +89,7 @@ app.get('/api/products', async (req, res) => {
 
     res.json({
       data: formattedProducts,
-      total,
+      total: Math.min(total, maxLimit),
       success: true,
       current: currentPage,
       pageSize: size,
