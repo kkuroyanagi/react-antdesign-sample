@@ -45,6 +45,31 @@ export const fetchProducts = async (
   };
 };
 
+// エクスポート用：検索条件に合致する全データを取得
+export const fetchProductsForExport = async (
+  params: Omit<FetchProductsParams, 'current' | 'pageSize'>
+): Promise<Product[]> => {
+  const searchParams = new URLSearchParams();
+
+  if (params.name) searchParams.set('name', params.name);
+  if (params.category) searchParams.set('category', params.category);
+  if (params.status) searchParams.set('status', params.status);
+  if (params.sortField) searchParams.set('sortField', params.sortField);
+  if (params.sortOrder) searchParams.set('sortOrder', params.sortOrder);
+
+  // ページサイズをlimitと同じにして1ページで全件取得
+  const limit = params.limit || 1000;
+  searchParams.set('limit', String(limit));
+  searchParams.set('pageSize', String(limit));
+  searchParams.set('current', '1');
+
+  const query = searchParams.toString();
+  const endpoint = `/products${query ? `?${query}` : ''}`;
+
+  const response = await api.get<PaginatedResponse<Product>>(endpoint);
+  return response.data;
+};
+
 // 商品詳細取得
 export const fetchProduct = async (id: number): Promise<Product> => {
   const response = await api.get<ApiResponse<Product>>(`/products/${id}`);

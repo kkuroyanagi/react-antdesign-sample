@@ -6,14 +6,17 @@ import { PlusOutlined, ExportOutlined } from '@ant-design/icons';
 const { Text } = Typography;
 import type { Product } from '@/types/product';
 import { ProductStatusMap, CategoryOptions } from '@/types/product';
-import { fetchProducts } from '@/services/productService';
+import { fetchProducts, fetchProductsForExport, type FetchProductsParams } from '@/services/productService';
+import { exportProductsToExcel } from '@/utils/exportExcel';
 
 const ProductList = () => {
   const actionRef = useRef<ActionType>(null);
+  const searchParamsRef = useRef<Omit<FetchProductsParams, 'current' | 'pageSize'>>({});
   const [fetchLimit, setFetchLimit] = useState<number>(() => {
     const saved = localStorage.getItem('productList.fetchLimit');
     return saved ? parseInt(saved, 10) : 1000;
   });
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     localStorage.setItem('productList.fetchLimit', String(fetchLimit));
@@ -23,6 +26,29 @@ const ProductList = () => {
     if (value) {
       setFetchLimit(value);
       actionRef.current?.reload();
+    }
+  };
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const products = await fetchProductsForExport({
+        ...searchParamsRef.current,
+        limit: fetchLimit,
+      });
+
+      if (products.length === 0) {
+        message.warning('エクスポートするデータがありません');
+        return;
+      }
+
+      await exportProductsToExcel(products);
+      message.success(`${products.length.toLocaleString()}件のデータをエクスポートしました`);
+    } catch (error) {
+      console.error('Export error:', error);
+      message.error('エクスポートに失敗しました');
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -141,14 +167,19 @@ const ProductList = () => {
         const sortOrderValue = sortField ? sort[sortField] : undefined;
         const sortOrder = sortOrderValue === 'ascend' || sortOrderValue === 'descend' ? sortOrderValue : undefined;
 
-        const response = await fetchProducts({
-          current: params.current,
-          pageSize: params.pageSize,
+        // エクスポート用に検索条件を保存
+        searchParamsRef.current = {
           name: params.name,
           category: params.category,
           status: params.status,
           sortField,
           sortOrder,
+        };
+
+        const response = await fetchProducts({
+          current: params.current,
+          pageSize: params.pageSize,
+          ...searchParamsRef.current,
           limit: fetchLimit,
         });
         return {
@@ -193,7 +224,8 @@ const ProductList = () => {
         <Button
           key="export"
           icon={<ExportOutlined />}
-          onClick={() => message.info('CSVエクスポート')}
+          loading={exporting}
+          onClick={handleExport}
         >
           エクスポート
         </Button>,
