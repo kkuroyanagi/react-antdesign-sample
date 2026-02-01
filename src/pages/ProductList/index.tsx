@@ -205,7 +205,7 @@ const ProductList = () => {
           <Text>取得上限:</Text>
           <InputNumber
             min={10}
-            max={10000}
+            max={100000}
             step={100}
             value={fetchLimit}
             onChange={handleLimitChange}

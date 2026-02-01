@@ -25,7 +25,7 @@ app.get('/api/products', async (req, res) => {
 
     const currentPage = parseInt(current as string, 10);
     const size = parseInt(pageSize as string, 10);
-    const maxLimit = Math.min(parseInt(limit as string, 10), 10000);
+    const maxLimit = Math.min(parseInt(limit as string, 10), 100000);
     const skip = (currentPage - 1) * size;
 
     // フィルタ条件を構築
