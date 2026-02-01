@@ -18,6 +18,8 @@ app.get('/api/products', async (req, res) => {
       name,
       category,
       status,
+      sortField,
+      sortOrder,
     } = req.query;
 
     const currentPage = parseInt(current as string, 10);
@@ -41,13 +43,22 @@ app.get('/api/products', async (req, res) => {
       where.status = status;
     }
 
+    // ソート条件を構築
+    const allowedSortFields = ['id', 'price', 'stock', 'createdAt'];
+    let orderBy: Record<string, 'asc' | 'desc'> = { id: 'asc' };
+
+    if (sortField && typeof sortField === 'string' && allowedSortFields.includes(sortField)) {
+      const order = sortOrder === 'descend' ? 'desc' : 'asc';
+      orderBy = { [sortField]: order };
+    }
+
     // データ取得とカウントを並列実行
     const [products, total] = await Promise.all([
       prisma.product.findMany({
         where,
         skip,
         take: size,
-        orderBy: { id: 'asc' },
+        orderBy,
       }),
       prisma.product.count({ where }),
     ]);

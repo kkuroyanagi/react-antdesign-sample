@@ -7,6 +7,8 @@ export interface FetchProductsParams {
   name?: string;
   category?: string;
   status?: ProductStatus;
+  sortField?: string;
+  sortOrder?: 'ascend' | 'descend';
 }
 
 export interface FetchProductsResponse {
@@ -26,6 +28,8 @@ export const fetchProducts = async (
   if (params.name) searchParams.set('name', params.name);
   if (params.category) searchParams.set('category', params.category);
   if (params.status) searchParams.set('status', params.status);
+  if (params.sortField) searchParams.set('sortField', params.sortField);
+  if (params.sortOrder) searchParams.set('sortOrder', params.sortOrder);
 
   const query = searchParams.toString();
   const endpoint = `/products${query ? `?${query}` : ''}`;

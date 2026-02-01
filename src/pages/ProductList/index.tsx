@@ -119,13 +119,19 @@ const ProductList = () => {
       actionRef={actionRef}
       rowKey="id"
       columns={columns}
-      request={async (params) => {
+      request={async (params, sort) => {
+        const sortField = Object.keys(sort)[0];
+        const sortOrderValue = sortField ? sort[sortField] : undefined;
+        const sortOrder = sortOrderValue === 'ascend' || sortOrderValue === 'descend' ? sortOrderValue : undefined;
+
         const response = await fetchProducts({
           current: params.current,
           pageSize: params.pageSize,
           name: params.name,
           category: params.category,
           status: params.status,
+          sortField,
+          sortOrder,
         });
         return {
           data: response.data,
